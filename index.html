@@ -46,7 +46,6 @@
       line-height: 2;
     }
 
-    /* 관리자 버튼 — 우하단에 항상 보임 */
     #admin-btn {
       position: fixed;
       bottom: 20px; right: 20px;
@@ -88,7 +87,6 @@
       font-size: 1.2rem;
       margin-bottom: 20px;
       color: #cba6f7;
-      letter-spacing: 0.04em;
     }
 
     .modal input[type="password"] {
@@ -120,7 +118,7 @@
 
     .error-msg { color: #f38ba8; font-size: 0.85rem; margin-bottom: 10px; min-height: 18px; }
 
-    #admin-panel .modal { width: 480px; max-height: 80vh; overflow-y: auto; }
+    #admin-panel .modal { width: 500px; max-height: 85vh; overflow-y: auto; }
 
     .image-list { margin: 16px 0; }
     .image-item {
@@ -169,6 +167,14 @@
       margin-top: 14px;
     }
     .notice strong { color: #cba6f7; }
+
+    .uploading-msg {
+      color: #a6e3a1;
+      font-size: 0.85rem;
+      margin: 8px 0;
+      min-height: 20px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -196,17 +202,18 @@
       <h2>🖼 슬라이드쇼 관리</h2>
 
       <div class="upload-area" onclick="document.getElementById('file-input').click()">
-        📁 클릭하여 이미지 추가<br>
+        📁 클릭하여 이미지 추가 (여러 장 동시 가능)<br>
         <input type="file" id="file-input" accept="image/*" multiple onchange="handleUpload(event)"/>
       </div>
+      <div class="uploading-msg" id="uploading-msg"></div>
 
       <div class="image-list" id="image-list"></div>
 
       <div class="notice">
         <strong>📌 안내</strong><br>
-        • 이미지는 이 기기(브라우저)에 저장됩니다.<br>
-        • 키오스크에서 직접 등록하거나, 키오스크 브라우저로 접속해서 등록하세요.<br>
-        • 브라우저를 초기화하면 이미지가 삭제됩니다.
+        • 이미지는 Cloudinary 서버에 저장됩니다.<br>
+        • 어떤 기기, 어떤 브라우저에서 열어도 동일하게 표시됩니다.<br>
+        • 삭제한 이미지는 복구되지 않습니다.
       </div>
 
       <div class="row" style="margin-top:20px">
@@ -217,34 +224,44 @@
 
   <script>
     // =============================================
-    // ★ 관리자 비밀번호 — 여기만 바꾸세요 ★
-    const ADMIN_PASSWORD = "YOUR_PASSWORD";
+    // ★ 아래 3가지를 본인 값으로 바꾸세요 ★
+    const CLOUD_NAME   = "dnme4st3h";   // Cloudinary Cloud name
+    const UPLOAD_PRESET = "kiosk_upload";      // 방금 만든 Upload Preset 이름
+    const ADMIN_PASSWORD = "044550";    // 관리자 비밀번호
     // =============================================
 
     const INTERVAL = 8000;
-    let images = [];
+    const FOLDER   = "kiosk";  // Cloudinary에 저장될 폴더명
+
+    let images = [];   // [{ publicId, url }]
     let current = 0;
     let timer = null;
     let slideEls = [];
 
-    function loadImages() {
+    /* ── Cloudinary에서 이미지 목록 불러오기 ── */
+    async function fetchImages() {
       try {
-        const saved = localStorage.getItem("kiosk_images");
-        images = saved ? JSON.parse(saved) : [];
+        // Cloudinary 검색 API (unsigned search)
+        const res = await fetch(
+          `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${FOLDER}.json`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) { images = []; return; }
+        const data = await res.json();
+        images = (data.resources || []).map(r => ({
+          publicId: r.public_id,
+          url: `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${r.public_id}`
+        }));
       } catch(e) { images = []; }
     }
 
-    function saveImages() {
-      localStorage.setItem("kiosk_images", JSON.stringify(images));
-    }
-
+    /* ── 슬라이드쇼 렌더 ── */
     function renderSlideshow() {
       slideEls.forEach(el => el.remove());
       slideEls = [];
       clearInterval(timer);
 
       const noImg = document.getElementById("no-images");
-
       if (images.length === 0) {
         noImg.style.display = "flex";
         document.getElementById("progress-bar").style.width = "0";
@@ -255,8 +272,8 @@
       images.forEach(img => {
         const el = document.createElement("img");
         el.className = "slide";
-        el.src = img.dataUrl;
-        el.alt = img.name;
+        el.src = img.url;
+        el.alt = img.publicId;
         el.draggable = false;
         document.body.insertBefore(el, document.getElementById("progress-bar"));
         slideEls.push(el);
@@ -285,6 +302,7 @@
       }));
     }
 
+    /* ── 로그인 ── */
     document.getElementById("admin-btn").addEventListener("click", () => {
       document.getElementById("login-modal").classList.add("open");
       document.getElementById("pw-input").value = "";
@@ -311,14 +329,17 @@
       document.getElementById("login-modal").classList.remove("open");
     }
 
-    function openAdmin() {
-      renderImageList();
+    /* ── 관리자 패널 ── */
+    async function openAdmin() {
       document.getElementById("admin-panel").classList.add("open");
+      document.getElementById("image-list").innerHTML = '<p style="color:#6c7086;font-size:0.9rem;padding:10px 0">불러오는 중...</p>';
+      await fetchImages();
+      renderImageList();
     }
 
     function closeAdmin() {
       document.getElementById("admin-panel").classList.remove("open");
-      renderSlideshow();
+      fetchImages().then(renderSlideshow);
     }
 
     function renderImageList() {
@@ -332,41 +353,70 @@
         const item = document.createElement("div");
         item.className = "image-item";
         item.innerHTML = `
-          <img src="${img.dataUrl}" alt="${img.name}"/>
-          <span class="img-name">${img.name}</span>
+          <img src="${img.url}" alt="${img.publicId}"/>
+          <span class="img-name">${img.publicId.replace(FOLDER + "/", "")}</span>
           <button class="btn btn-danger" onclick="deleteImage(${i})">삭제</button>
         `;
         list.appendChild(item);
       });
     }
 
-    function deleteImage(index) {
-      if (!confirm(images[index].name + " 을(를) 삭제할까요?")) return;
+    /* ── 이미지 삭제 ── */
+    async function deleteImage(index) {
+      if (!confirm(images[index].publicId.replace(FOLDER + "/", "") + " 을(를) 삭제할까요?")) return;
+      // Cloudinary unsigned delete (destroy)
+      const publicId = images[index].publicId;
+      const formData = new FormData();
+      formData.append("public_id", publicId);
+      formData.append("upload_preset", UPLOAD_PRESET);
+      // 삭제는 서버사이드가 필요하므로, 목록에서만 제거 후 안내
       images.splice(index, 1);
-      saveImages();
       renderImageList();
+      alert("목록에서 제거했습니다.\nCloudinary 대시보드에서도 직접 삭제해주세요.");
     }
 
-    function handleUpload(event) {
+    /* ── 이미지 업로드 ── */
+    async function handleUpload(event) {
       const files = Array.from(event.target.files);
-      let loaded = 0;
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          images.push({ name: file.name, dataUrl: e.target.result });
-          loaded++;
-          if (loaded === files.length) {
-            saveImages();
-            renderImageList();
+      const msg = document.getElementById("uploading-msg");
+      msg.textContent = `업로드 중... (0/${files.length})`;
+
+      let done = 0;
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("upload_preset", UPLOAD_PRESET);
+        formData.append("folder", FOLDER);
+
+        try {
+          const res = await fetch(
+            `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+            { method: "POST", body: formData }
+          );
+          const data = await res.json();
+          if (data.public_id) {
+            images.push({ publicId: data.public_id, url: data.secure_url });
           }
-        };
-        reader.readAsDataURL(file);
-      });
+        } catch(e) {
+          alert(file.name + " 업로드 실패");
+        }
+        done++;
+        msg.textContent = `업로드 중... (${done}/${files.length})`;
+      }
+
+      msg.textContent = "✅ 업로드 완료!";
+      setTimeout(() => { msg.textContent = ""; }, 2000);
+      renderImageList();
       event.target.value = "";
     }
 
-    loadImages();
-    renderSlideshow();
+    /* ── 초기 실행 ── */
+    fetchImages().then(renderSlideshow);
+
+    // 5분마다 자동 새로고침 (이미지 추가 시 자동 반영)
+    setInterval(() => {
+      fetchImages().then(renderSlideshow);
+    }, 5 * 60 * 1000);
   </script>
 </body>
 </html>
