@@ -11,7 +11,6 @@
       width: 100%; height: 100%;
       background: #000;
       overflow: hidden;
-      cursor: none;
       font-family: sans-serif;
     }
 
@@ -19,7 +18,7 @@
       position: absolute;
       inset: 0;
       width: 100%; height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       opacity: 0;
       transition: opacity 1.2s ease-in-out;
     }
@@ -47,17 +46,24 @@
       line-height: 2;
     }
 
+    /* 관리자 버튼 — 우하단에 항상 보임 */
     #admin-btn {
       position: fixed;
-      bottom: 18px; right: 18px;
-      width: 38px; height: 38px;
-      background: transparent;
-      border: none;
+      bottom: 20px; right: 20px;
+      width: 44px; height: 44px;
+      background: rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      font-size: 1.2rem;
       cursor: pointer;
       z-index: 100;
-      opacity: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(6px);
+      transition: background 0.2s;
     }
-    #admin-btn:hover { opacity: 0.3; }
+    #admin-btn:hover { background: rgba(255,255,255,0.3); }
 
     .modal-overlay {
       display: none;
@@ -85,8 +91,7 @@
       letter-spacing: 0.04em;
     }
 
-    .modal input[type="password"],
-    .modal input[type="text"] {
+    .modal input[type="password"] {
       width: 100%;
       padding: 10px 14px;
       border-radius: 8px;
@@ -170,8 +175,9 @@
 
   <div id="progress-bar"></div>
   <div id="no-images">등록된 이미지가 없습니다.<br>우하단 버튼을 눌러 관리자 페이지에 접속하세요.</div>
-  <button id="admin-btn" title="관리자">⚙</button>
+  <button id="admin-btn" title="관리자">⚙️</button>
 
+  <!-- 로그인 모달 -->
   <div class="modal-overlay" id="login-modal">
     <div class="modal">
       <h2>🔐 관리자 로그인</h2>
@@ -184,6 +190,7 @@
     </div>
   </div>
 
+  <!-- 관리자 패널 -->
   <div class="modal-overlay" id="admin-panel">
     <div class="modal">
       <h2>🖼 슬라이드쇼 관리</h2>
@@ -198,7 +205,7 @@
       <div class="notice">
         <strong>📌 안내</strong><br>
         • 이미지는 이 기기(브라우저)에 저장됩니다.<br>
-        • 키오스크 전용 브라우저에서 등록하면 키오스크에 표시됩니다.<br>
+        • 키오스크에서 직접 등록하거나, 키오스크 브라우저로 접속해서 등록하세요.<br>
         • 브라우저를 초기화하면 이미지가 삭제됩니다.
       </div>
 
@@ -211,10 +218,10 @@
   <script>
     // =============================================
     // ★ 관리자 비밀번호 — 여기만 바꾸세요 ★
-    const ADMIN_PASSWORD = "044550";
+    const ADMIN_PASSWORD = "YOUR_PASSWORD";
     // =============================================
 
-    const INTERVAL = 7000;
+    const INTERVAL = 8000;
     let images = [];
     let current = 0;
     let timer = null;
@@ -270,7 +277,6 @@
     function showSlide(index) {
       slideEls.forEach(el => el.classList.remove("active"));
       if (slideEls[index]) slideEls[index].classList.add("active");
-
       progressBar.style.transition = "none";
       progressBar.style.width = "0%";
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -358,20 +364,6 @@
       });
       event.target.value = "";
     }
-
-    document.addEventListener("keydown", e => {
-      if (document.getElementById("login-modal").classList.contains("open") ||
-          document.getElementById("admin-panel").classList.contains("open")) return;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        clearInterval(timer);
-        current = (current + 1) % images.length;
-        showSlide(current);
-        if (images.length > 1) timer = setInterval(() => {
-          current = (current + 1) % images.length;
-          showSlide(current);
-        }, INTERVAL);
-      }
-    });
 
     loadImages();
     renderSlideshow();
